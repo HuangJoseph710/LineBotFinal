@@ -23,4 +23,5 @@ urlpatterns = [
     path('admin/123', admin.site.urls)
     path('admin/', admin.site.urls),
     path('admin/123456', admin.site.urls),
+    path('admin/123456789', admin.site.urls),
 ]
