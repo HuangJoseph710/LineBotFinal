@@ -16,14 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from myapp.views import callback
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('admin/', admin.site.urls),
-    path('admin/123', admin.site.urls),
-    path('admin/', admin.site.urls),
-    path('admin/123456', admin.site.urls),
-    path('admin/123456789', admin.site.urls),
-    path('admin/1234567890', admin.site.urls),
-    path('admin/1234', admin.site.urls)
+    path('callback', callback),
 ]
