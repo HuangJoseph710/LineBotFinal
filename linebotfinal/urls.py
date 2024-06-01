@@ -16,9 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from myapp.views import callback
+from myapp.views import callback, send_multicast_message
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('callback', callback),
+    path('multicast/', send_multicast_message, name='send_multicast_message'),
 ]
