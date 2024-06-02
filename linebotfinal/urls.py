@@ -21,5 +21,5 @@ from myapp.views import callback, send_multicast_message
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('callback', callback),
-    path('multicast/', send_multicast_message, name='send_multicast_message'),
+    path('multicast', send_multicast_message, name='send_multicast_message'),
 ]

@@ -8,7 +8,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from myapp.models import user
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, ConfirmTemplate, PostbackTemplateAction, PostbackEvent, TemplateSendMessage
 from urllib.parse import parse_qsl
-
+import json
 import requests
 import time
 from openai import OpenAI, OpenAIError
@@ -166,16 +166,38 @@ def process_text(text):
         elif not skip:
             result += char
     return result
-def send_multicast_message(request):
 
-    # TODO: 透過api自訂用戶群體，資料庫抓取特定群體，更新user_id
-    user_ids = ['USER_ID_1', 'USER_ID_2', 'USER_ID_3']  # 使用者ID列表 FIXME: 透過api自訂用戶群體
-    
-    # TODO: 透過api自訂訊息
-    message = TextSendMessage(text='This is a multicast message!')
-    
-    try:
-        line_bot_api.multicast(user_ids, message)
-        return JsonResponse({"status": "success", "message": "Multicast message sent successfully"})
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)})
+
+# 群發訊息
+@csrf_exempt
+def send_multicast_message(request):
+    if request.method == 'POST':
+        try:
+            # 解析JSON請求
+            data = json.loads(request.body)
+            message_text = data['message']  # 從請求中獲取 訊息
+            target = data['target']  # 從請求中獲取 傳送訊息的對象
+            user_ids = find_user(target)
+
+            # 檢查user_ids和message_text是否有效
+            if not user_ids or not message_text:
+                return HttpResponseBadRequest("user_ids and message fields are required")
+
+            # 建立訊息物件
+            message = TextSendMessage(text=message_text)
+
+            # 傳送多播訊息
+            line_bot_api.multicast(user_ids, message)
+            return JsonResponse({"status": "success", "message": "Multicast message sent successfully"})
+        except json.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON")
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)})
+    else:
+        return HttpResponseBadRequest("Only POST method is allowed")
+
+#去資料庫調user_id
+def find_user(target):
+    # 從user資料庫中找出 exam_number 開頭為 target 的 user_id
+    user_ids = user.objects.filter(exam_number__startswith=target).values_list('user_id', flat=True)
+    return user_ids
