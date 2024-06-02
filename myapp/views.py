@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from myapp.models import user, examinee
 
 from linebot import LineBotApi, WebhookParser, WebhookHandler
 from linebot.exceptions import InvalidSignatureError, LineBotApiError
@@ -10,11 +11,9 @@ from linebot.models import (
     FlexSendMessage, BubbleContainer, BoxComponent, TextComponent
 )
 from urllib.parse import parse_qsl
-import json
 import requests
 import time
 from openai import OpenAI, OpenAIError
-
 import json
 from firebase import firebase
 
@@ -32,7 +31,7 @@ client = OpenAI(api_key=settings.OPENAI_API_KEY)
 firebase_url = settings.FIREBASE_URL
 
 # 用戶狀態
-user = {}
+user_status = {}
 
 @csrf_exempt
 def callback(request):
@@ -56,15 +55,15 @@ def callback(request):
                     user_id = event.source.user_id
                     if mtext == "@傳送文字":
                         sendText(event)
-                    elif user.get(user_id) == 'asking_question':  # 如果用戶在問題狀態，處理問題
-                        user[user_id] = None  # 清除狀態
+                    elif user_status.get(user_id) == 'asking_question':  # 如果用戶在問題狀態，處理問題
+                        user_status[user_id] = None  # 清除狀態
                         get_answer_from_openai(user_id, mtext)
                     elif mtext == "@詢問問題":
-                        user[user_id] = 'asking_question'
+                        user_status[user_id] = 'asking_question'
                         askQuestion(event)
                     elif mtext == "@模擬面試": #進入模擬面試狀態
                         start_interview(event) 
-                    elif user.get(user_id) == 'interview':
+                    elif user_status.get(user_id) == 'interview':
                         process_interview(event, mtext)
                     else:
                         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=mtext))
@@ -72,14 +71,14 @@ def callback(request):
                 backdata = dict(parse_qsl(event.postback.data))
                 if backdata.get('action') == 'yes':
                     user_id = event.source.user_id
-                    user[user_id] = 'asking_question'
+                    user_status[user_id] = 'asking_question'
                     askQuestion(event)
                 if backdata.get('action') == 'no':
                     # 這裡可以換成我們做的總模板
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text="謝謝您的使用～🫶🏻"))
                 if backdata.get('action') == 'interview_yes':
                     user_id = event.source.user_id
-                    user[user_id] = 'interview'
+                    user_status[user_id] = 'interview'
                     continue_interview(event) #繼續進行模擬面試
                 if backdata.get('action') == 'interview_no':
                     user_id = event.source.user_id
@@ -258,7 +257,7 @@ def start_interview(event):
     reply_msg = TextSendMessage(text=ai_msg)
     message = [introduction_msg, reply_msg]
     line_bot_api.reply_message(event.reply_token, message)
-    user[user_id] = 'interview'
+    user_status[user_id] = 'interview'
 
 # 模擬面試助理進行打分
 def process_interview(event, user_answer):
@@ -398,5 +397,5 @@ def clear_chat_history(user_id):
     fdb = firebase.FirebaseApplication(firebase_url, None)
     user_chat_path = f'chat/{user_id}'
     fdb.delete(user_chat_path, None)
-    user[user_id] = None
+    user_status[user_id] = None
 
