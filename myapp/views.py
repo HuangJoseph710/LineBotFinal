@@ -30,7 +30,7 @@ ASSISTANT_ID = settings.ASSISTANT_ID
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 firebase_url = settings.FIREBASE_URL
 
-# 用戶狀態
+# 用戶狀態 FIXME: 把user_status整併到django資料庫裡
 user_status = {}
 
 @csrf_exempt
@@ -55,6 +55,8 @@ def callback(request):
                     user_id = event.source.user_id
                     if mtext == "@傳送文字":
                         sendText(event)
+                    elif mtext[:5] == "@綁定帳號":
+                        bindAccount(event, mtext)
                     elif user_status.get(user_id) == 'asking_question':  # 如果用戶在問題狀態，處理問題
                         user_status[user_id] = None  # 清除狀態
                         get_answer_from_openai(user_id, mtext)
@@ -101,6 +103,45 @@ def sendText(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="傳送文字發生錯誤!"))
 
 # ==========================================資料庫=============================================
+def bindAccount(event, mtext):
+
+    # 解析傳入資料
+    try:
+        data = mtext.split("\n")
+        exam_number = data[1]
+        name = data[2]
+        birthday = data[3]
+    except:
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入正確格式!"))
+        return
+    
+    # 確認考生資料是否正確
+    if not examinee.objects.filter(exam_number=exam_number).exists():
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="考生資料不存在!"))
+        return
+    else:
+        # 確認生日格式是否正確
+        if not birthday.isdigit() or len(birthday) != 8:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="生日格式不正確! 請輸入8碼西元生日\nex: 20010203"))
+            return
+        
+        # 檢查考生姓名與生日 是否在資料庫當中
+        examinee_data = examinee.objects.filter(exam_number=exam_number).first()
+        if examinee_data.name != name or examinee_data.birthday != birthday:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="考生資料不正確!"))
+            return
+        
+        # 正式綁定帳號
+        user_id = event.source.user_id
+        user_data = user.objects.filter(user_id=user_id).first()
+        # 更新name、birthday、exam_number的資料
+        user_data.name = name
+        user_data.exam_number = exam_number
+        user_data.birthday = birthday
+        user_data.save()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="綁定成功!"))
+        return
+
 
 def checkUser(event):
     user_id = event.source.user_id
@@ -108,15 +149,16 @@ def checkUser(event):
     if not user.objects.filter(user_id=user_id).exists():
         user.objects.create(user_id=user_id)
 
-# 群發訊息
+# =============================================群發訊息=============================================
 @csrf_exempt
 def send_multicast_message(request):
     if request.method == 'POST':
         try:
             # 解析JSON請求
+            print(request.body)
             data = json.loads(request.body)
-            message_text = data['message']  # 從請求中獲取 訊息
-            target = data['target']  # 從請求中獲取 傳送訊息的對象
+            message_text = data.get('message')  # 從請求中獲取 訊息
+            target = data.get('target')  # 從請求中獲取 傳送訊息的對象
             user_ids = find_user(target)
 
             # 檢查user_ids和message_text是否有效
@@ -139,7 +181,7 @@ def send_multicast_message(request):
 #去資料庫調user_id
 def find_user(target):
     # 從user資料庫中找出 exam_number 開頭為 target 的 user_id
-    user_ids = user.objects.filter(exam_number__startswith=target).values_list('user_id', flat=True)
+    user_ids = list(user.objects.filter(exam_number__startswith=target).values_list('user_id', flat=True))
     return user_ids
 
 
