@@ -47,7 +47,7 @@ def callback(request):
         
         for event in events:
             
-            checkUser(event) #檢查用戶是否已存在於資料庫裡
+            # checkUser(event) #檢查用戶是否已存在於資料庫裡
 
             if isinstance(event, MessageEvent):
                 if isinstance(event.message, TextMessage):
@@ -233,14 +233,14 @@ def start_interview(event):
     user_chat_path = f'chat/{user_id}'
     
     introduction = (
-        "您好，我是專門幫助學生準備中原大學資管系面試的模擬面試助理。"
+        "您好，我是專門幫助學生準備中原大學資管系面試的模擬面試助理🤖\n"
         "我將會提出面試問題，並根據您的回答給予評分、評語和建議。"
-        "每次您回答後，我會詢問是否需要繼續提問。"
+        
     )
     introduction_msg=TextSendMessage(text=introduction)
 
     messages = [
-        {"role": "system", "content": "你是繁體中文人工智慧助理，幫助學生準備中原大學資管系的面試。您將提出問題、評估他們的答案、提供回饋並提出改進建議。\n請以以下固定格式提供回應:\n1. 評分：[例如：優秀/中規中矩/待加強之類的表述方式]\n2. 評語：[描述文字]\n3. 建議回達內容：[描述文字]"},
+        {"role": "system", "content": "你是繁體中文人工智慧助理，幫助學生準備中原大學資管系的面試。您將提出問題、評估他們的答案、提供回饋並提出改進建議。\n請以以下固定格式提供回應:\n1. 評分：[例如：需要顯著改進/尚可接受但有改進空間/表現出色]\n2. 評語：[描述文字]\n3. 建議回達內容：[描述文字]"},
         {"role": "user", "content": "出題"}
     ]
     response = client.chat.completions.create(
@@ -296,21 +296,21 @@ def process_interview(event, user_answer):
                 BoxComponent(
                     layout='vertical',
                     contents=[
-                        TextComponent(text='評分', weight='bold', size='xl', wrap=True),
-                        TextComponent(text=score, size='sm', margin='md', wrap=True)
+                        TextComponent(text='1️⃣ 評分', weight='bold', size='lg', wrap=True),
+                        TextComponent(text=score+"\n", size='sm', margin='md', wrap=True)
                     ]
                 ),
                 BoxComponent(
                     layout='vertical',
                     contents=[
-                        TextComponent(text='評語', weight='bold', size='xl', wrap=True),
-                        TextComponent(text=comment, size='sm', margin='md', wrap=True)
+                        TextComponent(text='2️⃣ 評語', weight='bold', size='lg', wrap=True),
+                        TextComponent(text=comment+"\n", size='sm', margin='md', wrap=True)
                     ]
                 ),
                 BoxComponent(
                     layout='vertical',
                     contents=[
-                        TextComponent(text='建議回答內容', weight='bold', size='xl', wrap=True),
+                        TextComponent(text='3️⃣ 建議回答內容', weight='bold', size='lg', wrap=True),
                         TextComponent(text=suggestion, size='sm', margin='md', wrap=True)
                     ]
                 )
@@ -377,7 +377,7 @@ def provide_final_feedback(event, user_id):
     if chatgpt is None:
         chatgpt = []
 
-    chatgpt.append({"role": "user", "content": "請給我總結性評語並指出我的弱項"})
+    chatgpt.append({"role": "user", "content": "請給我總結的評語並指出我的弱項"})
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         max_tokens=400,
