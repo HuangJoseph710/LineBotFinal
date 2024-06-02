@@ -80,22 +80,17 @@ def callback(request):
                 if backdata.get('action') == 'interview_yes':
                     user_id = event.source.user_id
                     user[user_id] = 'interview'
-                    continue_interview(event)
+                    continue_interview(event) #繼續進行模擬面試
                 if backdata.get('action') == 'interview_no':
                     user_id = event.source.user_id
-                    clear_chat_history(user_id)
+                    provide_final_feedback(event, user_id) # 提供總結與回饋
+                    clear_chat_history(user_id) #清除firebase資料庫
                     # 這裡可以換成我們做的總模板
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text="謝謝您的使用～🫶🏻"))
 
         return HttpResponse()
     else:
         return HttpResponseBadRequest()
-
-def checkUser(event):
-    user_id = event.source.user_id
-    # 如果用戶未存在於資料庫中，存入user_id
-    if not user.objects.filter(user_id=user_id).exists():
-        user.objects.create(user_id=user_id)
 
 def sendText(event):
     try:
@@ -106,6 +101,30 @@ def sendText(event):
     except LineBotApiError:
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="傳送文字發生錯誤!"))
 
+# ==========================================資料庫=============================================
+
+def checkUser(event):
+    user_id = event.source.user_id
+    # 如果用戶未存在於資料庫中，存入user_id
+    if not user.objects.filter(user_id=user_id).exists():
+        user.objects.create(user_id=user_id)
+
+def send_multicast_message(request):
+
+    # TODO: 透過api自訂用戶群體，資料庫抓取特定群體，更新user_id
+    user_ids = ['USER_ID_1', 'USER_ID_2', 'USER_ID_3']  # 使用者ID列表 FIXME: 透過api自訂用戶群體
+    
+    # TODO: 透過api自訂訊息
+    message = TextSendMessage(text='This is a multicast message!')
+    
+    try:
+        line_bot_api.multicast(user_ids, message)
+        return JsonResponse({"status": "success", "message": "Multicast message sent successfully"})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)})
+
+
+# ==========================================RAG提問問題=============================================
 # RAG回答
 def askQuestion(event):
     try:
@@ -186,6 +205,8 @@ def process_text(text):
             result += char
     return result
 
+
+# ==========================================模擬面試=============================================
 # 開始模擬面試
 def start_interview(event):
     user_id = event.source.user_id
@@ -328,22 +349,33 @@ def continue_interview(event):
     reply_msg = TextSendMessage(text=ai_msg)
     line_bot_api.push_message(user_id, reply_msg)
 
+# 提供總結性評語和弱項
+def provide_final_feedback(event, user_id):
+    fdb = firebase.FirebaseApplication(firebase_url, None)
+    user_chat_path = f'chat/{user_id}'
+    chatgpt = fdb.get(user_chat_path, None)
+
+    if chatgpt is None:
+        chatgpt = []
+
+    chatgpt.append({"role": "user", "content": "請給我總結性評語並指出我的弱項"})
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        max_tokens=400,
+        temperature=0.5,
+        messages=chatgpt
+    )
+    
+    ai_msg = response.choices[0].message.to_dict()['content'].replace('\n', '')
+    chatgpt.append({"role": "assistant", "content": ai_msg})
+    fdb.put_async(user_chat_path, None, chatgpt)
+    
+    reply_msg = TextSendMessage(text=ai_msg)
+    line_bot_api.push_message(user_id, reply_msg)
+
 # 清除歷史紀錄
 def clear_chat_history(user_id):
     fdb = firebase.FirebaseApplication(firebase_url, None)
     user_chat_path = f'chat/{user_id}'
     fdb.delete(user_chat_path, None)
     user[user_id] = None
-def send_multicast_message(request):
-
-    # TODO: 透過api自訂用戶群體，資料庫抓取特定群體，更新user_id
-    user_ids = ['USER_ID_1', 'USER_ID_2', 'USER_ID_3']  # 使用者ID列表 FIXME: 透過api自訂用戶群體
-    
-    # TODO: 透過api自訂訊息
-    message = TextSendMessage(text='This is a multicast message!')
-    
-    try:
-        line_bot_api.multicast(user_ids, message)
-        return JsonResponse({"status": "success", "message": "Multicast message sent successfully"})
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)})
