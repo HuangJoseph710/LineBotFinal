@@ -8,7 +8,7 @@ from linebot.exceptions import InvalidSignatureError, LineBotApiError
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage, ConfirmTemplate,
     PostbackTemplateAction, PostbackEvent, TemplateSendMessage,
-    FlexSendMessage, BubbleContainer, BoxComponent, TextComponent
+    FlexSendMessage, BubbleContainer, BoxComponent, TextComponent,ImageCarouselTemplate,ImageCarouselColumn,MessageTemplateAction
 )
 from urllib.parse import parse_qsl
 import requests
@@ -67,6 +67,8 @@ def callback(request):
                         start_interview(event) 
                     elif user_status.get(user_id) == 'interview':
                         process_interview(event, mtext)
+                    elif mtext == "@轉盤": #進入模擬面試狀態
+                        sendImgCarousel(event) 
                     else:
                         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=mtext))
             if isinstance(event, PostbackEvent):
@@ -77,7 +79,8 @@ def callback(request):
                     askQuestion(event)
                 if backdata.get('action') == 'no':
                     # 這裡可以換成我們做的總模板
-                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="謝謝您的使用～🫶🏻"))
+                    # line_bot_api.reply_message(event.reply_token, TextSendMessage(text="謝謝您的使用～🫶🏻"))
+                    sendImgCarousel(event)
                 if backdata.get('action') == 'interview_yes':
                     user_id = event.source.user_id
                     user_status[user_id] = 'interview'
@@ -87,7 +90,8 @@ def callback(request):
                     provide_final_feedback(event, user_id) # 提供總結與回饋
                     clear_chat_history(user_id) #清除firebase資料庫
                     # 這裡可以換成我們做的總模板
-                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="謝謝您的使用～🫶🏻"))
+                    # line_bot_api.reply_message(event.reply_token, TextSendMessage(text="謝謝您的使用～🫶🏻"))
+                    sendImgCarousel(event)
 
         return HttpResponse()
     else:
@@ -101,6 +105,35 @@ def sendText(event):
         line_bot_api.reply_message(event.reply_token, message)
     except LineBotApiError:
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="傳送文字發生錯誤!"))
+
+# =======================================================圖片轉盤=========================================================
+
+def sendImgCarousel(event):
+    try:
+        message = TemplateSendMessage(
+            alt_text = '圖片轉盤',
+            template = ImageCarouselTemplate(
+                columns = [
+                    ImageCarouselColumn(
+                        image_url = 'https://manually-inspired-hedgehog.ngrok-free.app/static/34_0.jpg',
+                        action = MessageTemplateAction(
+                            label = '詢問問題',
+                            text = "@詢問問題"
+                        ) 
+                    ),
+                    ImageCarouselColumn(
+                        image_url = 'https://manually-inspired-hedgehog.ngrok-free.app/static/35_0.jpg',
+                        action = MessageTemplateAction(
+                            label = '模擬面試',
+                            text = "@模擬面試"
+                        ) 
+                    )
+                ]
+            )
+        )
+        line_bot_api.reply_message(event.reply_token, message)
+    except:
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text='圖片轉盤發生錯誤！'))
 
 # ==========================================資料庫=============================================
 def bindAccount(event, mtext):
