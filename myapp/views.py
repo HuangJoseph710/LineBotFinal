@@ -47,7 +47,7 @@ def callback(request):
         
         for event in events:
             
-            # checkUser(event) #檢查用戶是否已存在於資料庫裡
+            addUser(event) #檢查用戶是否已存在於資料庫裡
 
             if isinstance(event, MessageEvent):
                 if isinstance(event.message, TextMessage):
@@ -61,14 +61,23 @@ def callback(request):
                         user_status[user_id] = None  # 清除狀態
                         get_answer_from_openai(user_id, mtext)
                     elif mtext == "@詢問問題":
-                        user_status[user_id] = 'asking_question'
-                        askQuestion(event)
+                        if check_user_binded(event):
+                            user_status[user_id] = 'asking_question'
+                            askQuestion(event)
+                        else:
+                            request_bind(event)
                     elif mtext == "@模擬面試": #進入模擬面試狀態
-                        start_interview(event) 
+                        if check_user_binded(event):
+                            start_interview(event) 
+                        else:
+                            request_bind(event)
                     elif user_status.get(user_id) == 'interview':
                         process_interview(event, mtext)
                     else:
-                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=mtext))
+                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="若有除了@詢問問題 與 @模擬面試 以外的需求，請耐心等候承辦人員回覆。\n若您有緊急問題需要提問，請致電03-3655401。"))
+                        # 鸚鵡機器人
+                        # line_bot_api.reply_message(event.reply_token, TextSendMessage(text=mtext))
+            
             if isinstance(event, PostbackEvent):
                 backdata = dict(parse_qsl(event.postback.data))
                 if backdata.get('action') == 'yes':
@@ -92,6 +101,11 @@ def callback(request):
         return HttpResponse()
     else:
         return HttpResponseBadRequest()
+
+def request_bind(event):
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(
+        text="請先綁定帳號!!\n\n依照格式輸入個人資料綁定：\n@綁定帳號\n准考證號碼\n姓名\n西元生日8碼\n\n如：\n@綁定帳號\n11044333\n黃小嘉\n20240603"
+        ))
 
 def sendText(event):
     try:
@@ -139,11 +153,12 @@ def bindAccount(event, mtext):
         user_data.exam_number = exam_number
         user_data.birthday = birthday
         user_data.save()
+
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="綁定成功!"))
         return
 
 
-def checkUser(event):
+def addUser(event):
     user_id = event.source.user_id
     # 如果用戶未存在於資料庫中，存入user_id
     if not user.objects.filter(user_id=user_id).exists():
@@ -155,15 +170,20 @@ def send_multicast_message(request):
     if request.method == 'POST':
         try:
             # 解析JSON請求
-            print(request.body)
-            data = json.loads(request.body)
+            print(request.body.decode('utf-8'))
+            data = json.loads(request.body.decode('utf-8'))
             message_text = data.get('message')  # 從請求中獲取 訊息
             target = data.get('target')  # 從請求中獲取 傳送訊息的對象
             user_ids = find_user(target)
 
-            # 檢查user_ids和message_text是否有效
-            if not user_ids or not message_text:
-                return HttpResponseBadRequest("user_ids and message fields are required")
+            print(message_text)
+            print(target)
+            # 檢查target和message_text是否有效
+            if not target or not message_text:
+                return HttpResponseBadRequest("target and message fields are required")
+            
+            if not user_ids:
+                return HttpResponseBadRequest("Don't find any target!")
 
             # 建立訊息物件
             message = TextSendMessage(text=message_text)
@@ -184,7 +204,15 @@ def find_user(target):
     user_ids = list(user.objects.filter(exam_number__startswith=target).values_list('user_id', flat=True))
     return user_ids
 
-
+def check_user_binded(event) -> bool:
+    user_id = event.source.user_id
+    # 如果用戶未存在於資料庫中，存入user_id
+    # 調閱出user資料表裡user_id所對應的exam_number
+    user_data = user.objects.filter(user_id=user_id).first()
+    if user_data:
+        if user_data.exam_number == "":
+            return False
+    return True
 
 # ==========================================RAG提問問題=============================================
 # RAG回答
